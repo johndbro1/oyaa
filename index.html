@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Retirement Spending Simulator</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; }
+
+    body {
+      font-family: system-ui, sans-serif;
+      font-size: 15px;
+      background: #f4f6f9;
+      color: #222;
+      margin: 0;
+      padding: 20px;
+    }
+
+    h1 { margin-bottom: 4px; font-size: 1.6rem; }
+    .subtitle { color: #555; margin-bottom: 24px; }
+
+    .card {
+      background: #fff;
+      border: 1px solid #dde2e8;
+      border-radius: 8px;
+      padding: 20px 24px;
+      margin-bottom: 16px;
+      max-width: 860px;
+    }
+
+    .card h2 {
+      margin: 0 0 14px;
+      font-size: 1.05rem;
+      color: #1a4a8a;
+      border-bottom: 1px solid #e4e8f0;
+      padding-bottom: 6px;
+    }
+
+    .field-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 16px;
+      align-items: flex-end;
+      margin-bottom: 10px;
+    }
+
+    label { display: flex; flex-direction: column; gap: 3px; font-size: 0.88rem; color: #444; }
+    label input, label select { font-size: 0.95rem; padding: 5px 8px; border: 1px solid #bbb; border-radius: 4px; min-width: 90px; }
+    label input[type="checkbox"] { width: auto; min-width: unset; }
+
+    .list-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      align-items: flex-end;
+      background: #f8f9fb;
+      border: 1px solid #e2e6ec;
+      border-radius: 5px;
+      padding: 10px 12px;
+      margin-bottom: 8px;
+    }
+
+    .list-row button {
+      padding: 4px 10px;
+      background: #e05252;
+      color: #fff;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 0.82rem;
+    }
+
+    .add-btn {
+      padding: 6px 14px;
+      background: #2a6fc7;
+      color: #fff;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 0.88rem;
+      margin-top: 4px;
+    }
+    .add-btn:hover { background: #1a5ab0; }
+
+    #run-btn {
+      display: block;
+      padding: 12px 36px;
+      background: #1a8a3a;
+      color: #fff;
+      font-size: 1rem;
+      font-weight: bold;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      margin: 20px 0;
+      max-width: 860px;
+      width: 100%;
+    }
+    #run-btn:hover:not(:disabled) { background: #127a2e; }
+    #run-btn:disabled { background: #999; cursor: default; }
+
+    #progress { display: none; max-width: 860px; }
+    #progress-text { font-size: 0.9rem; color: #555; margin: 6px 0 4px; }
+    #progress-bar-track {
+      width: 100%;
+      height: 14px;
+      background: #e0e4ea;
+      border-radius: 7px;
+      overflow: hidden;
+    }
+    #progress-bar-fill {
+      height: 100%;
+      width: 0%;
+      background: #2a6fc7;
+      border-radius: 7px;
+      transition: width 0.1s ease;
+    }
+
+    #results-section { display: none; max-width: 860px; }
+
+    #results-table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+    #results-table th, #results-table td {
+      border: 1px solid #dde2e8;
+      padding: 8px 14px;
+      text-align: right;
+    }
+    #results-table th { background: #f0f4fa; font-weight: 600; text-align: center; }
+    #results-table td:first-child { text-align: left; }
+
+    .tier-high { background: #eafaf0; }
+    .tier-mid  { background: #fefbe6; }
+    .tier-low  { background: #fdf0f0; }
+
+    .helper { font-size: 0.82rem; color: #777; margin-top: 4px; }
+
+    select { padding: 5px 8px; border: 1px solid #bbb; border-radius: 4px; font-size: 0.95rem; }
+  </style>
+</head>
+<body>
+
+<h1>Retirement Spending Simulator</h1>
+<p class="subtitle">Monte Carlo simulation — how much can you spend each month?</p>
+
+<!-- Person 1 -->
+<div class="card">
+  <h2>You</h2>
+  <div class="field-row">
+    <label>Current Age <input type="number" id="age" min="20" max="100" value="65"></label>
+    <label>Life Expectancy
+      <input type="number" id="le" min="50" max="120" value="85">
+      <span class="helper">Use <a href="https://www.livingto100.com" target="_blank">LivingTo100.com</a></span>
+    </label>
+    <label>Social Security Start Age <input type="number" id="ss-age" min="62" max="80" value="67"></label>
+    <label>SS Monthly (today's $) <input type="number" id="ss-monthly" min="0" value="2000"></label>
+  </div>
+</div>
+
+<!-- Spouse -->
+<div class="card">
+  <h2>Spouse / Partner</h2>
+  <label style="flex-direction:row; gap:8px; align-items:center; margin-bottom:12px;">
+    <input type="checkbox" id="has-spouse" onchange="toggleSpouse()"> Include spouse/partner
+  </label>
+  <div id="spouse-section" style="display:none">
+    <div class="field-row">
+      <label>Spouse Age <input type="number" id="spouse-age" min="20" max="100" value="63"></label>
+      <label>Spouse Life Expectancy <input type="number" id="spouse-le" min="50" max="120" value="87"></label>
+      <label>Spouse SS Start Age <input type="number" id="spouse-ss-age" min="62" max="80" value="67"></label>
+      <label>Spouse SS Monthly (today's $) <input type="number" id="spouse-ss-monthly" min="0" value="1500"></label>
+    </div>
+  </div>
+</div>
+
+<!-- Portfolio -->
+<div class="card">
+  <h2>Retirement Portfolio</h2>
+  <div class="field-row">
+    <label>Total Portfolio Value ($)
+      <input type="number" id="portfolio-value" min="0" step="10000" value="1000000">
+    </label>
+    <label>Asset Mix
+      <select id="asset-mix"></select>
+    </label>
+  </div>
+</div>
+
+<!-- Annuities / Pensions -->
+<div class="card">
+  <h2>Pensions &amp; Annuities</h2>
+  <div id="annuities-list"></div>
+  <button class="add-btn" onclick="addAnnuityRow()">+ Add Pension / Annuity</button>
+</div>
+
+<!-- Windfalls -->
+<div class="card">
+  <h2>Expected Windfalls</h2>
+  <p class="helper">Inheritances, property sales, large gifts, etc.</p>
+  <div id="windfalls-list"></div>
+  <button class="add-btn" onclick="addWindfallRow()">+ Add Windfall</button>
+</div>
+
+<!-- Expenses -->
+<div class="card">
+  <h2>One-Time Expenses</h2>
+  <p class="helper">Large purchases, vacations, education gifts, etc.</p>
+  <div id="expenses-list"></div>
+  <button class="add-btn" onclick="addExpenseRow()">+ Add Expense</button>
+</div>
+
+<!-- Estate -->
+<div class="card">
+  <h2>Target Estate</h2>
+  <div class="field-row">
+    <label>Amount to Leave Heirs ($) <input type="number" id="estate" min="0" step="10000" value="0"></label>
+    <label style="flex-direction:row; gap:8px; align-items:center;">
+      <input type="checkbox" id="estate-inflation"> Inflation Adjusted
+    </label>
+  </div>
+</div>
+
+<!-- Spending Settings -->
+<div class="card">
+  <h2>Spending Settings</h2>
+  <div class="field-row">
+    <label>Starting Monthly Spend to Test ($)
+      <input type="number" id="starting-spend" min="500" step="500" value="3000">
+    </label>
+    <label>Annual Spending Reduction (as you age)
+      <select id="spend-reduction">
+        <option value="0">None (0%)</option>
+        <option value="0.0025">0.25% per year</option>
+        <option value="0.005">0.5% per year</option>
+        <option value="0.01">1% per year</option>
+        <option value="0.02">2% per year</option>
+      </select>
+    </label>
+  </div>
+</div>
+
+<!-- Simulation Settings -->
+<div class="card">
+  <h2>Simulation Runs</h2>
+  <p class="helper">More runs = more accurate, but slower. Each run simulates your entire lifetime once.</p>
+  <div class="field-row">
+    <label style="flex-direction:row; gap:8px; align-items:center;">
+      <input type="radio" name="num-runs" value="100"> 100 (fast, rough)
+    </label>
+    <label style="flex-direction:row; gap:8px; align-items:center;">
+      <input type="radio" name="num-runs" value="1000" checked> 1,000 (recommended)
+    </label>
+    <label style="flex-direction:row; gap:8px; align-items:center;">
+      <input type="radio" name="num-runs" value="10000"> 10,000 (precise, slow)
+    </label>
+  </div>
+</div>
+
+<button id="run-btn" onclick="runSimulation()">Run Simulation</button>
+
+<div id="progress">
+  <div id="progress-text"></div>
+  <div id="progress-bar-track"><div id="progress-bar-fill"></div></div>
+</div>
+
+<!-- Results -->
+<div id="results-section" class="card">
+  <h2>Results</h2>
+  <p id="results-summary" style="font-weight:600; margin-bottom:6px;"></p>
+  <p class="helper">
+    Green = 90%+ success rate &nbsp;|&nbsp; Yellow = 50–89% &nbsp;|&nbsp; Red = below 50%.
+    Success means your portfolio lasts until the last person passes and meets your estate target.
+  </p>
+  <table id="results-table">
+    <thead>
+      <tr><th>Monthly Spend</th><th>Success Rate</th></tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+</div>
+
+<script src="js/data.js"></script>
+<script src="js/simulation.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
