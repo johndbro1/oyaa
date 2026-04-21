@@ -28,10 +28,10 @@ function getRows(containerId) {
 
 function addAnnuityRow() {
   addRow('annuities-list', `
-    <label>Monthly $<input type="number" class="ann-amount" min="0" value="0"></label>
-    <label>Start Age <input type="number" class="ann-start" min="0" max="120" value="65"></label>
+    <label>Monthly $<input type="text" inputmode="numeric" class="ann-amount" name="pension-monthly" value="0"></label>
+    <label>Start Age <input type="number" class="ann-start" name="pension-start-age" min="0" max="120" value="65"></label>
     <label>End:
-      <select class="ann-end-cond" onchange="toggleEndYear(this)">
+      <select class="ann-end-cond" name="pension-end-condition" onchange="toggleEndYear(this)">
         <option value="bothDeath">Death of both</option>
         <option value="userDeath">Death of user</option>
         <option value="spouseDeath">Death of spouse</option>
@@ -39,10 +39,11 @@ function addAnnuityRow() {
       </select>
     </label>
     <span class="end-year-wrap" style="display:none">
-      <label>End Year <input type="number" class="ann-end-year" min="2024" max="2150" value="2040"></label>
+      <label>End Year <input type="number" class="ann-end-year" name="pension-end-year" min="2024" max="2150" value="2040"></label>
     </span>
-    <label><input type="checkbox" class="ann-inflation"> Inflation Adjusted</label>
+    <label style="flex-direction:row; gap:8px; align-items:center;"><input type="checkbox" class="ann-inflation" name="pension-inflation-adjusted"> Inflation Adjusted</label>
   `);
+  applyDollarSanitizers(document.getElementById('annuities-list'));
 }
 
 function toggleEndYear(sel) {
@@ -53,17 +54,19 @@ function toggleEndYear(sel) {
 function addWindfallRow() {
   const currentYear = new Date().getFullYear();
   addRow('windfalls-list', `
-    <label>Amount $<input type="number" class="wf-amount" min="0" value="0"></label>
-    <label>Year <input type="number" class="wf-year" min="${currentYear}" max="2150" value="${currentYear + 5}"></label>
+    <label>Amount $<input type="text" inputmode="numeric" class="wf-amount" name="windfall-amount" value="0"></label>
+    <label>Year <input type="number" class="wf-year" name="windfall-year" min="${currentYear}" max="2150" value="${currentYear + 5}"></label>
   `);
+  applyDollarSanitizers(document.getElementById('windfalls-list'));
 }
 
 function addExpenseRow() {
   const currentYear = new Date().getFullYear();
   addRow('expenses-list', `
-    <label>Amount $<input type="number" class="exp-amount" min="0" value="0"></label>
-    <label>Year <input type="number" class="exp-year" min="${currentYear}" max="2150" value="${currentYear + 1}"></label>
+    <label>Amount $<input type="text" inputmode="numeric" class="exp-amount" name="expense-amount" value="0"></label>
+    <label>Year <input type="number" class="exp-year" name="expense-year" min="${currentYear}" max="2150" value="${currentYear + 1}"></label>
   `);
+  applyDollarSanitizers(document.getElementById('expenses-list'));
 }
 
 // --- Form reading ---
@@ -75,7 +78,7 @@ function val(id) {
   const radio = document.querySelector(`input[name="${id}"]:checked`);
   return radio ? radio.value : '';
 }
-function numVal(id) { return parseFloat(val(id)) || 0; }
+function numVal(id) { return parseFloat((val(id) || '').replace(/[$,\s]/g, '')) || 0; }
 function checked(id) { return document.getElementById(id).checked; }
 
 function buildInput() {
@@ -129,31 +132,50 @@ function buildInput() {
 
     annualSpendReductionRate: parseFloat(val('spend-reduction')) || 0,
     startingMonthlySpend:     numVal('starting-spend'),
-    stopSuccessRate:          0.10,
+    stopSuccessRate:          parseFloat(val('stop-rate')) || 0.10,
     numRuns:                  parseInt(val('num-runs')) || 1000,
   };
 }
 
 // --- Results rendering ---
 
-function renderResults(results) {
+function ageRangeStr(currentAge, le) {
+  const lo = Math.max(currentAge + 1, Math.round(le - 25));
+  const hi = Math.round(le + 25);
+  return `${lo}–${hi}`;
+}
+
+function renderResults(results, input) {
   const section = document.getElementById('results-section');
   const tbody = document.querySelector('#results-table tbody');
   const summary = document.getElementById('results-summary');
+  const numRuns = input.numRuns;
 
   tbody.innerHTML = '';
 
-  for (const { monthlySpend, successRate } of results) {
+  for (const { monthlySpend, successRate, numRuns: rowRuns } of results) {
     const pct = (successRate * 100).toFixed(1);
+    const annual = monthlySpend * 12;
     const tr = document.createElement('tr');
-    tr.className = successRate >= 0.90 ? 'tier-high'
-                 : successRate >= 0.50 ? 'tier-mid'
-                 : 'tier-low';
-    tr.innerHTML = `<td>$${monthlySpend.toLocaleString()}/mo</td><td>${pct}%</td>`;
+    tr.className = successRate >= 0.90 ? ''
+                 : successRate >= 0.80 ? 'tier-green'
+                 : successRate >= 0.65 ? 'tier-orange'
+                 : 'tier-red';
+    tr.innerHTML = `<td>$${monthlySpend.toLocaleString()}/mo</td><td>$${annual.toLocaleString()}/yr</td><td>${pct}%</td><td>${(rowRuns || numRuns).toLocaleString()}</td>`;
     tbody.appendChild(tr);
   }
 
-  summary.textContent = `Simulation complete — ${results.length} spend level${results.length !== 1 ? 's' : ''} tested.`;
+  const totalSims = (results.length * numRuns).toLocaleString();
+  const levels = results.length;
+  summary.textContent = `Simulation complete — ${levels} spend level${levels !== 1 ? 's' : ''} tested, ${totalSims} total simulations run.`;
+
+  // Age range note (#3)
+  let rangeNote = `Simulated age range — you: ${ageRangeStr(input.age, input.lifeExpectancy)}`;
+  if (input.spouseAge != null) {
+    rangeNote += ` &nbsp;|&nbsp; partner: ${ageRangeStr(input.spouseAge, input.spouseLifeExpectancy)}`;
+  }
+  document.getElementById('age-range-note').innerHTML = rangeNote;
+
   section.style.display = 'block';
   section.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
@@ -178,32 +200,57 @@ function runSimulation() {
   const progress = document.getElementById('progress');
   const progressText = document.getElementById('progress-text');
   btn.disabled = true;
-  progress.style.display = '';
+  progress.style.display = 'block';
   document.getElementById('results-section').style.display = 'none';
 
   const barFill = document.getElementById('progress-bar-fill');
+  barFill.classList.add('running');
 
+  let lastSpend = null;
   runMonteCarloSimulation(input,
     (monthlySpend, runsComplete, totalRuns) => {
-      const pct = Math.round((runsComplete / totalRuns) * 100);
-      progressText.textContent = `Testing $${monthlySpend.toLocaleString()}/mo — ${runsComplete} / ${totalRuns} runs`;
-      barFill.style.width = pct + '%';
+      if (monthlySpend !== lastSpend) {
+        lastSpend = monthlySpend;
+        progressText.textContent = `Testing $${monthlySpend.toLocaleString()}/mo…`;
+      }
     },
     (results) => {
-      renderResults(results);
+      barFill.classList.remove('running');
+      renderResults(results, input);
       btn.disabled = false;
       progress.style.display = 'none';
       progressText.textContent = '';
-      barFill.style.width = '0%';
     }
   );
+}
+
+// --- Dollar input sanitization ---
+
+function applyDollarSanitizer(el) {
+  function clean(raw) {
+    const stripped = raw.replace(/[$,\s]/g, '');
+    if (stripped === '' || stripped === '-') return;
+    const num = Math.floor(parseFloat(stripped) || 0);
+    if (el.value !== String(num)) el.value = num;
+  }
+  el.addEventListener('paste', (e) => {
+    e.preventDefault();
+    clean((e.clipboardData || window.clipboardData).getData('text'));
+  });
+  el.addEventListener('input', () => clean(el.value));
+  el.addEventListener('blur',  () => clean(el.value));
+}
+
+function applyDollarSanitizers(container) {
+  container.querySelectorAll('.ann-amount, .wf-amount, .exp-amount').forEach(applyDollarSanitizer);
 }
 
 // --- Spouse toggle ---
 
 function toggleSpouse() {
-  document.getElementById('spouse-section').style.display =
-    checked('has-spouse') ? '' : 'none';
+  const show = checked('has-spouse') ? '' : 'none';
+  document.getElementById('spouse-age-section').style.display = show;
+  document.getElementById('spouse-ss-section').style.display = show;
 }
 
 // --- Init ---
@@ -217,4 +264,11 @@ window.addEventListener('DOMContentLoaded', () => {
     opt.textContent = mix.label;
     sel.appendChild(opt);
   }
+
+  // Apply dollar sanitizers to all static dollar fields
+  ['ss-monthly', 'spouse-ss-monthly', 'portfolio-value', 'estate', 'starting-spend']
+    .forEach(id => {
+      const el = document.getElementById(id);
+      if (el) applyDollarSanitizer(el);
+    });
 });

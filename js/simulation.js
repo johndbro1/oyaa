@@ -14,7 +14,7 @@ function pickRandom(arr) {
 function sampleDeathAge(currentAge, lifeExpectancy) {
   if (currentAge == null || lifeExpectancy == null) return null;
   const raw = Math.round(normalRandom(lifeExpectancy, 12.5));
-  return Math.min(120, Math.max(currentAge + 1, raw));
+  return Math.max(currentAge + 1, raw);
 }
 
 // Returns true if portfolio survives, false if ruin
@@ -99,9 +99,10 @@ function simulateOnce(input, monthlySpend, deathAge1, deathAge2) {
       if (w.simYear === simYear) portfolio += w.amount;
     }
 
-    // Spending (reduced each year as people age)
+    // Spending — inflation-adjusted to maintain real purchasing power,
+    // then reduced each year as people age.
     const spendReduction = Math.pow(1 - (input.annualSpendReductionRate || 0), year);
-    portfolio -= annualSpend * spendReduction;
+    portfolio -= annualSpend * cumulativeInflation * spendReduction;
 
     // One-time expenses
     for (const e of (input.expenses || [])) {
@@ -152,7 +153,7 @@ function runMonteCarloSimulation(input, onProgress, onDone) {
 
     // This spend level is done
     const successRate = successes / numRuns;
-    results.push({ monthlySpend, successRate });
+    results.push({ monthlySpend, successRate, numRuns });
 
     if (successRate > stopRate && monthlySpend < 200000) {
       monthlySpend += 500;

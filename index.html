@@ -110,10 +110,17 @@
     }
     #progress-bar-fill {
       height: 100%;
-      width: 0%;
+      width: 30%;
       background: #2a6fc7;
       border-radius: 7px;
-      transition: width 0.1s ease;
+      transform: translateX(-150%);
+    }
+    @keyframes slide {
+      0%   { transform: translateX(-150%); }
+      100% { transform: translateX(450%); }
+    }
+    #progress-bar-fill.running {
+      animation: slide 1.2s ease-in-out infinite;
     }
 
     #results-section { display: none; max-width: 860px; }
@@ -127,13 +134,20 @@
     #results-table th { background: #f0f4fa; font-weight: 600; text-align: center; }
     #results-table td:first-child { text-align: left; }
 
-    .tier-high { background: #eafaf0; }
-    .tier-mid  { background: #fefbe6; }
-    .tier-low  { background: #fdf0f0; }
+    #results-table tr.tier-green  td { background: #d4edda; color: #155724; }
+    #results-table tr.tier-orange td { background: #ffe8cc; color: #7a3e00; }
+    #results-table tr.tier-red    td { background: #f8d7da; color: #721c24; }
 
     .helper { font-size: 0.82rem; color: #777; margin-top: 4px; }
 
     select { padding: 5px 8px; border: 1px solid #bbb; border-radius: 4px; font-size: 0.95rem; }
+
+    .field-row-2col {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+      margin-bottom: 10px;
+    }
   </style>
 </head>
 <body>
@@ -141,32 +155,38 @@
 <h1>Retirement Spending Simulator</h1>
 <p class="subtitle">Monte Carlo simulation — how much can you spend each month?</p>
 
-<!-- Person 1 -->
+<form autocomplete="on" onsubmit="return false;">
+
+<!-- Ages -->
 <div class="card">
-  <h2>You</h2>
-  <div class="field-row">
-    <label>Current Age <input type="number" id="age" min="20" max="100" value="65"></label>
-    <label>Life Expectancy
-      <input type="number" id="le" min="50" max="120" value="85">
-      <span class="helper">Use <a href="https://www.livingto100.com" target="_blank">LivingTo100.com</a></span>
-    </label>
-    <label>Social Security Start Age <input type="number" id="ss-age" min="62" max="80" value="67"></label>
-    <label>SS Monthly (today's $) <input type="number" id="ss-monthly" min="0" value="2000"></label>
+  <h2>Age</h2>
+  <p class="helper" style="margin-top:-8px; margin-bottom:12px;">Not sure about life expectancy? Try <a href="https://www.livingto100.com" target="_blank">LivingTo100.com</a></p>
+  <div class="field-row-2col">
+    <label>Your Current Age <input type="number" id="age" name="age" min="20" max="100" value="65"></label>
+    <label>Your Life Expectancy <input type="number" id="le" name="life-expectancy" min="50" max="120" value="85"></label>
+  </div>
+  <label style="flex-direction:row; gap:8px; align-items:center; margin-bottom:10px;">
+    <input type="checkbox" id="has-spouse" name="has-spouse" onchange="toggleSpouse()"> Include spouse/partner
+  </label>
+  <div id="spouse-age-section" style="display:none">
+    <div class="field-row-2col">
+      <label>Partner Age <input type="number" id="spouse-age" name="partner-age" min="20" max="100" value="63"></label>
+      <label>Partner Life Expectancy <input type="number" id="spouse-le" name="partner-life-expectancy" min="50" max="120" value="87"></label>
+    </div>
   </div>
 </div>
 
-<!-- Spouse -->
+<!-- Social Security -->
 <div class="card">
-  <h2>Spouse / Partner</h2>
-  <label style="flex-direction:row; gap:8px; align-items:center; margin-bottom:12px;">
-    <input type="checkbox" id="has-spouse" onchange="toggleSpouse()"> Include spouse/partner
-  </label>
-  <div id="spouse-section" style="display:none">
-    <div class="field-row">
-      <label>Spouse Age <input type="number" id="spouse-age" min="20" max="100" value="63"></label>
-      <label>Spouse Life Expectancy <input type="number" id="spouse-le" min="50" max="120" value="87"></label>
-      <label>Spouse SS Start Age <input type="number" id="spouse-ss-age" min="62" max="80" value="67"></label>
-      <label>Spouse SS Monthly (today's $) <input type="number" id="spouse-ss-monthly" min="0" value="1500"></label>
+  <h2>Social Security</h2>
+  <div class="field-row-2col">
+    <label>Your SS Start Age <input type="number" id="ss-age" name="ss-start-age" min="62" max="80" value="67"></label>
+    <label>Your SS Monthly (today's $) <input type="text" inputmode="numeric" id="ss-monthly" name="ss-monthly" value="2000"></label>
+  </div>
+  <div id="spouse-ss-section" style="display:none">
+    <div class="field-row-2col">
+      <label>Partner SS Start Age <input type="number" id="spouse-ss-age" name="partner-ss-start-age" min="62" max="80" value="67"></label>
+      <label>Partner SS Monthly (today's $) <input type="text" inputmode="numeric" id="spouse-ss-monthly" name="partner-ss-monthly" value="1500"></label>
     </div>
   </div>
 </div>
@@ -176,10 +196,10 @@
   <h2>Retirement Portfolio</h2>
   <div class="field-row">
     <label>Total Portfolio Value ($)
-      <input type="number" id="portfolio-value" min="0" step="10000" value="1000000">
+      <input type="text" inputmode="numeric" id="portfolio-value" name="portfolio-value" value="1000000">
     </label>
     <label>Asset Mix
-      <select id="asset-mix"></select>
+      <select id="asset-mix" name="asset-mix"></select>
     </label>
   </div>
 </div>
@@ -187,6 +207,7 @@
 <!-- Annuities / Pensions -->
 <div class="card">
   <h2>Pensions &amp; Annuities</h2>
+  <p class="helper">Pensions without inflation adjustment will cover less of your spending each year as inflation erodes their purchasing power.</p>
   <div id="annuities-list"></div>
   <button class="add-btn" onclick="addAnnuityRow()">+ Add Pension / Annuity</button>
 </div>
@@ -211,9 +232,9 @@
 <div class="card">
   <h2>Target Estate</h2>
   <div class="field-row">
-    <label>Amount to Leave Heirs ($) <input type="number" id="estate" min="0" step="10000" value="0"></label>
+    <label>Amount to Leave Heirs ($) <input type="text" inputmode="numeric" id="estate" name="estate-target" value="0"></label>
     <label style="flex-direction:row; gap:8px; align-items:center;">
-      <input type="checkbox" id="estate-inflation"> Inflation Adjusted
+      <input type="checkbox" id="estate-inflation" name="estate-inflation"> Inflation Adjusted
     </label>
   </div>
 </div>
@@ -223,15 +244,26 @@
   <h2>Spending Settings</h2>
   <div class="field-row">
     <label>Starting Monthly Spend to Test ($)
-      <input type="number" id="starting-spend" min="500" step="500" value="3000">
+      <input type="text" inputmode="numeric" id="starting-spend" name="starting-spend" value="3000">
     </label>
     <label>Annual Spending Reduction (as you age)
-      <select id="spend-reduction">
+      <select id="spend-reduction" name="spend-reduction">
         <option value="0">None (0%)</option>
         <option value="0.0025">0.25% per year</option>
         <option value="0.005">0.5% per year</option>
         <option value="0.01">1% per year</option>
         <option value="0.02">2% per year</option>
+      </select>
+    </label>
+    <label>Stop testing when success rate drops below
+      <select id="stop-rate" name="stop-rate">
+        <option value="0.10">10%</option>
+        <option value="0.20">20%</option>
+        <option value="0.30">30%</option>
+        <option value="0.40">40%</option>
+        <option value="0.50">50%</option>
+        <option value="0.65" selected>65% (stop at red)</option>
+        <option value="0.80">80% (stop at orange)</option>
       </select>
     </label>
   </div>
@@ -254,6 +286,8 @@
   </div>
 </div>
 
+</form>
+
 <button id="run-btn" onclick="runSimulation()">Run Simulation</button>
 
 <div id="progress">
@@ -265,13 +299,15 @@
 <div id="results-section" class="card">
   <h2>Results</h2>
   <p id="results-summary" style="font-weight:600; margin-bottom:6px;"></p>
+  <p id="age-range-note" class="helper" style="margin-bottom:6px;"></p>
   <p class="helper">
-    Green = 90%+ success rate &nbsp;|&nbsp; Yellow = 50–89% &nbsp;|&nbsp; Red = below 50%.
+    White = above 90% (too conservative) &nbsp;|&nbsp; <span style="background:#d4edda;color:#155724;padding:0 4px;border-radius:3px;">Green = 80–90% sweet spot</span> &nbsp;|&nbsp; <span style="background:#ffe8cc;color:#7a3e00;padding:0 4px;border-radius:3px;">Orange = 65–79%</span> &nbsp;|&nbsp; <span style="background:#f8d7da;color:#721c24;padding:0 4px;border-radius:3px;">Red = below 65%</span>.
     Success means your portfolio lasts until the last person passes and meets your estate target.
+    Monthly spend figures are in today's dollars — the simulation increases them with inflation each year to maintain real purchasing power.
   </p>
   <table id="results-table">
     <thead>
-      <tr><th>Monthly Spend</th><th>Success Rate</th></tr>
+      <tr><th>Monthly Spend</th><th>Annual Amount</th><th>Success Rate</th><th>Runs</th></tr>
     </thead>
     <tbody></tbody>
   </table>
@@ -280,5 +316,11 @@
 <script src="js/data.js"></script>
 <script src="js/simulation.js"></script>
 <script src="js/app.js"></script>
+
+<footer style="max-width:860px; margin-top:32px; padding:12px 0; border-top:1px solid #dde2e8; font-size:0.8rem; color:#888; text-align:center;">
+  <p style="margin:0 0 4px;">100% browser-based — no data is sent to any server or stored anywhere outside your browser.</p>
+  <p style="margin:0;">Retirement Spending Simulator v0.1</p>
+</footer>
+
 </body>
 </html>
