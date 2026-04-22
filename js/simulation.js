@@ -45,71 +45,76 @@ function simulateOnce(input, monthlySpend, deathAge1, deathAge2) {
   for (let year = 0; year < yearsToRun; year++) {
     const age1 = input.age + year;
     const age2 = hasSpouse ? input.spouseAge + year : null;
-    const simYear = year; // years from now
+    const simYear = year;
 
     const p1Alive = age1 < deathAge1;
     const p2Alive = hasSpouse && age2 < deathAge2;
-    const anyoneAlive = p1Alive || p2Alive;
+    if (!p1Alive && !p2Alive) break;
 
-    if (!anyoneAlive) break;
+    // 1. Pre-calculation: spending target with annual reduction
+    const reductionFactor = Math.pow(1 - (input.annualSpendReductionRate || 0), year);
+    const baseAnnualSpend = annualSpend * reductionFactor;
 
-    // Market return and inflation
-    const ret = pickRandom(input.assetMixReturns);
-    const inf = pickRandom(input.inflationData);
-    cumulativeInflation *= (1 + inf);
-    portfolio *= (1 + ret);
+    // 2. Cash flow update (before market growth)
+    let netCashFlow = 0;
 
-    // Social Security — COLA-adjusted (tracks inflation each year)
-    // Both alive: each collects their own benefit if past their start age
-    // One dead: survivor collects the higher of their own benefit or the deceased's benefit
-    //           (only if the deceased was eligible at time of death)
+    // Spending (always inflation adjusted)
+    netCashFlow -= baseAnnualSpend * cumulativeInflation;
+
+    // Social Security (COLA adjusted)
     if (p1Alive && p2Alive) {
-      if (input.ssMonthly    && age1 >= input.ssAge)        portfolio += input.ssMonthly * 12 * cumulativeInflation;
-      if (input.spouseSsMonthly && age2 >= input.spouseSsAge) portfolio += input.spouseSsMonthly * 12 * cumulativeInflation;
+      if (input.ssMonthly       && age1 >= input.ssAge)       netCashFlow += input.ssMonthly * 12 * cumulativeInflation;
+      if (input.spouseSsMonthly && age2 >= input.spouseSsAge) netCashFlow += input.spouseSsMonthly * 12 * cumulativeInflation;
     } else if (p1Alive) {
-      // p2 is dead — p1 gets the higher of their own benefit or p2's survivor benefit
       const ownBenefit = (input.ssMonthly && age1 >= input.ssAge) ? input.ssMonthly : 0;
-      portfolio += Math.max(ownBenefit, p2SurvivorBenefit) * 12 * cumulativeInflation;
+      netCashFlow += Math.max(ownBenefit, p2SurvivorBenefit) * 12 * cumulativeInflation;
     } else if (p2Alive) {
-      // p1 is dead — p2 gets the higher of their own benefit or p1's survivor benefit
       const ownBenefit = (input.spouseSsMonthly && age2 >= input.spouseSsAge) ? input.spouseSsMonthly : 0;
-      portfolio += Math.max(ownBenefit, p1SurvivorBenefit) * 12 * cumulativeInflation;
+      netCashFlow += Math.max(ownBenefit, p1SurvivorBenefit) * 12 * cumulativeInflation;
     }
 
     // Annuities
     for (const ann of (input.annuities || [])) {
       if (age1 < ann.startAge) continue;
-
       let active = true;
       if (ann.endCondition === 'specificYear' && simYear >= ann.endSimYear) active = false;
-      if (ann.endCondition === 'userDeath'   && !p1Alive) active = false;
-      if (ann.endCondition === 'spouseDeath' && !p2Alive) active = false;
-      // 'bothDeath' — loop already stops when no one is alive
-
+      if (ann.endCondition === 'userDeath'    && !p1Alive) active = false;
+      if (ann.endCondition === 'spouseDeath'  && !p2Alive) active = false;
       if (active) {
-        const amount = ann.inflationAdjusted
+        netCashFlow += ann.inflationAdjusted
           ? ann.monthlyAmount * 12 * cumulativeInflation
           : ann.monthlyAmount * 12;
-        portfolio += amount;
       }
     }
 
     // Windfalls
     for (const w of (input.windfalls || [])) {
-      if (w.simYear === simYear) portfolio += w.amount;
+      if (w.simYear === simYear) {
+        netCashFlow += w.inflationAdjusted ? w.amount * cumulativeInflation : w.amount;
+      }
     }
 
-    // Spending — inflation-adjusted to maintain real purchasing power,
-    // then reduced each year as people age.
-    const spendReduction = Math.pow(1 - (input.annualSpendReductionRate || 0), year);
-    portfolio -= annualSpend * cumulativeInflation * spendReduction;
-
-    // One-time expenses
+    // Expenses
     for (const e of (input.expenses || [])) {
-      if (e.simYear === simYear) portfolio -= e.amount;
+      if (e.simYear === simYear) {
+        netCashFlow -= e.inflationAdjusted ? e.amount * cumulativeInflation : e.amount;
+      }
     }
 
+    portfolio += netCashFlow;
     if (portfolio <= 0) return false;
+
+    // 3. Market step
+    const marketRow = pickRandom(input.marketData);
+    const yearReturn = (marketRow.sp500      * input.allocations.sp500) +
+                       (marketRow.small_cap  * input.allocations.smallcap) +
+                       (marketRow.tbond      * input.allocations.bond) +
+                       (marketRow.tbill      * input.allocations.cash);
+    portfolio *= (1 + yearReturn);
+
+    // 4. Inflation update (independent sample)
+    const infTarget = pickRandom(input.inflationData);
+    cumulativeInflation *= (1 + infTarget);
   }
 
   // Estate check

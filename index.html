@@ -198,9 +198,18 @@
     <label>Total Portfolio Value ($)
       <input type="text" inputmode="numeric" id="portfolio-value" name="portfolio-value" value="1000000">
     </label>
-    <label>Asset Mix
-      <select id="asset-mix" name="asset-mix"></select>
-    </label>
+  </div>
+  <div class="field-row" style="flex-direction: column; align-items: flex-start; gap: 10px;">
+    <div style="display: flex; flex-wrap: wrap; gap: 12px;">
+      <label>S&amp;P 500 % <input type="number" id="alloc-sp500" value="60" min="0" max="100" step="5" style="width:60px"></label>
+      <label>Small Cap % <input type="number" id="alloc-smallcap" value="0" min="0" max="100" step="5" style="width:60px"></label>
+      <label>Total Bond % <input type="number" id="alloc-bond" value="40" min="0" max="100" step="5" style="width:60px"></label>
+      <label>T-Bill (Cash) % <input type="number" id="alloc-cash" value="0" min="0" max="100" step="5" style="width:60px"></label>
+    </div>
+    <div id="allocation-status" style="font-weight: bold; font-size: 0.9rem;">
+      Total Allocation: <span id="total-pct">100</span>%
+      <span id="allocation-msg" style="color: green; margin-left: 10px;">✓ Ready</span>
+    </div>
   </div>
 </div>
 

@@ -1,17 +1,6 @@
 // app.js — UI wiring, data loading, result rendering
 // Data is pre-loaded from js/data.js (no fetch needed, works with file://)
 
-const ASSET_MIXES = [
-  { label: '80% Bonds / 10% S&P / 10% International',           key: 'bonds_80_sp_10_intl_10' },
-  { label: '80% Bonds / 20% S&P 500',                           key: 'bonds_80_sp_20' },
-  { label: '60% Bonds / 20% S&P / 20% International',           key: 'bonds_60_sp_20_intl_20' },
-  { label: '40% Bonds / 30% S&P / 30% International',           key: 'bonds_40_sp_30_intl_30' },
-  { label: '20% each: Bonds / S&P / Intl / Mid / Small Cap',    key: 'equal_5way' },
-  { label: '25% each: S&P / Intl / Mid Cap / Small Cap',        key: 'equal_4way' },
-  { label: 'S&P 500 Only',                                       key: 'sp_500' },
-  { label: 'Small Cap Only',                                     key: 'small_cap' },
-];
-
 // --- Dynamic list helpers ---
 
 function addRow(containerId, template) {
@@ -56,6 +45,7 @@ function addWindfallRow() {
   addRow('windfalls-list', `
     <label>Amount $<input type="text" inputmode="numeric" class="wf-amount" name="windfall-amount" value="0"></label>
     <label>Year <input type="number" class="wf-year" name="windfall-year" min="${currentYear}" max="2150" value="${currentYear + 5}"></label>
+    <label style="flex-direction:row; gap:8px; align-items:center;"><input type="checkbox" class="wf-inflation" checked> Inflation Adjusted</label>
   `);
   applyDollarSanitizers(document.getElementById('windfalls-list'));
 }
@@ -65,6 +55,7 @@ function addExpenseRow() {
   addRow('expenses-list', `
     <label>Amount $<input type="text" inputmode="numeric" class="exp-amount" name="expense-amount" value="0"></label>
     <label>Year <input type="number" class="exp-year" name="expense-year" min="${currentYear}" max="2150" value="${currentYear + 1}"></label>
+    <label style="flex-direction:row; gap:8px; align-items:center;"><input type="checkbox" class="exp-inflation" checked> Inflation Adjusted</label>
   `);
   applyDollarSanitizers(document.getElementById('expenses-list'));
 }
@@ -81,9 +72,31 @@ function val(id) {
 function numVal(id) { return parseFloat((val(id) || '').replace(/[$,\s]/g, '')) || 0; }
 function checked(id) { return document.getElementById(id).checked; }
 
+function validateAllocation() {
+  const sp500   = parseInt(document.getElementById('alloc-sp500').value) || 0;
+  const smallcap = parseInt(document.getElementById('alloc-smallcap').value) || 0;
+  const bond    = parseInt(document.getElementById('alloc-bond').value) || 0;
+  const cash    = parseInt(document.getElementById('alloc-cash').value) || 0;
+
+  const total = sp500 + smallcap + bond + cash;
+  document.getElementById('total-pct').textContent = total;
+
+  const msg = document.getElementById('allocation-msg');
+  const btn = document.getElementById('run-btn');
+
+  if (total === 100) {
+    msg.textContent = '✓ Ready';
+    msg.style.color = 'green';
+    btn.disabled = false;
+  } else {
+    msg.textContent = '⚠ Total must be 100%';
+    msg.style.color = 'red';
+    btn.disabled = true;
+  }
+}
+
 function buildInput() {
   const currentYear = new Date().getFullYear();
-  const assetKey = val('asset-mix');
 
   const annuities = getRows('annuities-list').map(row => ({
     monthlyAmount:     parseFloat(row.querySelector('.ann-amount').value) || 0,
@@ -96,13 +109,15 @@ function buildInput() {
   }));
 
   const windfalls = getRows('windfalls-list').map(row => ({
-    amount:  parseFloat(row.querySelector('.wf-amount').value) || 0,
-    simYear: (parseInt(row.querySelector('.wf-year').value) || currentYear) - currentYear,
+    amount:            parseFloat(row.querySelector('.wf-amount').value) || 0,
+    simYear:           (parseInt(row.querySelector('.wf-year').value) || currentYear) - currentYear,
+    inflationAdjusted: row.querySelector('.wf-inflation').checked,
   }));
 
   const expenses = getRows('expenses-list').map(row => ({
-    amount:  parseFloat(row.querySelector('.exp-amount').value) || 0,
-    simYear: (parseInt(row.querySelector('.exp-year').value) || currentYear) - currentYear,
+    amount:            parseFloat(row.querySelector('.exp-amount').value) || 0,
+    simYear:           (parseInt(row.querySelector('.exp-year').value) || currentYear) - currentYear,
+    inflationAdjusted: row.querySelector('.exp-inflation').checked,
   }));
 
   const hasSpouse = checked('has-spouse');
@@ -114,9 +129,16 @@ function buildInput() {
     spouseAge:            hasSpouse ? numVal('spouse-age') : null,
     spouseLifeExpectancy: hasSpouse ? numVal('spouse-le') : null,
 
-    portfolioValue:  numVal('portfolio-value'),
-    assetMixReturns: DATA[assetKey] || [],
-    inflationData:   DATA.historical_inflation,
+    portfolioValue: numVal('portfolio-value'),
+    marketData:     DATA.all_market_data,
+    inflationData:  DATA.historical_inflation,
+
+    allocations: {
+      sp500:    (parseInt(document.getElementById('alloc-sp500').value) || 0) / 100,
+      smallcap: (parseInt(document.getElementById('alloc-smallcap').value) || 0) / 100,
+      bond:     (parseInt(document.getElementById('alloc-bond').value) || 0) / 100,
+      cash:     (parseInt(document.getElementById('alloc-cash').value) || 0) / 100,
+    },
 
     ssAge:           numVal('ss-age') || null,
     ssMonthly:       numVal('ss-monthly') || null,
@@ -191,11 +213,6 @@ function runSimulation() {
     return;
   }
 
-  if (!input.assetMixReturns.length) {
-    alert('Could not load portfolio data. Please refresh the page.');
-    return;
-  }
-
   const btn = document.getElementById('run-btn');
   const progress = document.getElementById('progress');
   const progressText = document.getElementById('progress-text');
@@ -256,14 +273,11 @@ function toggleSpouse() {
 // --- Init ---
 
 window.addEventListener('DOMContentLoaded', () => {
-  // Populate asset mix dropdown from ASSET_MIXES
-  const sel = document.getElementById('asset-mix');
-  for (const mix of ASSET_MIXES) {
-    const opt = document.createElement('option');
-    opt.value = mix.key;
-    opt.textContent = mix.label;
-    sel.appendChild(opt);
-  }
+  // Allocation validation
+  ['alloc-sp500', 'alloc-smallcap', 'alloc-bond', 'alloc-cash'].forEach(id => {
+    document.getElementById(id).addEventListener('input', validateAllocation);
+  });
+  validateAllocation();
 
   // Apply dollar sanitizers to all static dollar fields
   ['ss-monthly', 'spouse-ss-monthly', 'portfolio-value', 'estate', 'starting-spend']
