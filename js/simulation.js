@@ -59,21 +59,21 @@ function simulateOnce(input, monthlySpend, deathAge1, deathAge2) {
     cumulativeInflation *= (1 + inf);
     portfolio *= (1 + ret);
 
-    // Social Security — nominal (not inflation-adjusted)
+    // Social Security — COLA-adjusted (tracks inflation each year)
     // Both alive: each collects their own benefit if past their start age
     // One dead: survivor collects the higher of their own benefit or the deceased's benefit
     //           (only if the deceased was eligible at time of death)
     if (p1Alive && p2Alive) {
-      if (input.ssMonthly    && age1 >= input.ssAge)        portfolio += input.ssMonthly * 12;
-      if (input.spouseSsMonthly && age2 >= input.spouseSsAge) portfolio += input.spouseSsMonthly * 12;
+      if (input.ssMonthly    && age1 >= input.ssAge)        portfolio += input.ssMonthly * 12 * cumulativeInflation;
+      if (input.spouseSsMonthly && age2 >= input.spouseSsAge) portfolio += input.spouseSsMonthly * 12 * cumulativeInflation;
     } else if (p1Alive) {
       // p2 is dead — p1 gets the higher of their own benefit or p2's survivor benefit
       const ownBenefit = (input.ssMonthly && age1 >= input.ssAge) ? input.ssMonthly : 0;
-      portfolio += Math.max(ownBenefit, p2SurvivorBenefit) * 12;
+      portfolio += Math.max(ownBenefit, p2SurvivorBenefit) * 12 * cumulativeInflation;
     } else if (p2Alive) {
       // p1 is dead — p2 gets the higher of their own benefit or p1's survivor benefit
       const ownBenefit = (input.spouseSsMonthly && age2 >= input.spouseSsAge) ? input.spouseSsMonthly : 0;
-      portfolio += Math.max(ownBenefit, p1SurvivorBenefit) * 12;
+      portfolio += Math.max(ownBenefit, p1SurvivorBenefit) * 12 * cumulativeInflation;
     }
 
     // Annuities
