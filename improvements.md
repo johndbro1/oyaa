@@ -1,5 +1,5 @@
 
-# PHASE 1 - Use 97 years of market data
+# PHASE 1 - Use 97 years of market data - DONE
 
 I've found a dataset that includes data for the last 97 years. you can find it in all_market_data.js
   The way we handle the portfolio should be changed.
@@ -55,18 +55,20 @@ return the new portfolio balance and cumulative_inflation_new as inputs for the 
 
 # PHASE 2 - Medicare and Tax
 
-11. in the results table, using today's IRS numbers, include the effective federal income tax rate assuming everything is taxable, the total annual tax expected, and the monthly equivalent (ie annual divided by 12)
+11. in the results table, using today's IRS rules, include a) the projeced effective federal income tax rate assuming all spending is taxable, b) the total annual tax expected, and c) the quarterly equivalent (ie annual divided by 4)
 
 12. pull tax calculations into a separate subsystem, so we can tinker with it separately from the main report
 
-13. the tax calculations don't have to happen until the results are done, since they don't depend on random performance. 
+13. the tax calculations don't have to happen until the results are done, since they don't depend on random performance. They will obviously be different for the different spending levels
 
 14. create a new subsystem to calculate medicare fees based on current known rules and fee schedules. We'll use this as part of
-the detailed final report.
+the detailed final report. Include projected medicare fees, but only if one or both spouses are 65 or over.
 
-15. Let the user specify the state, and include the state taxes they'll expect to pay based on monthly income as well.  So we'll need a subsystem to calculate state taxes as well.  Again, this will only need to happen at the very end, with the final results table.
+15. Let the user specify the state, and include a) the projected effective state income tax rate, b) the state income taxes they'll be expected to pay and c) the quarterly equivalent.  We'll need a subsystem to calculate state taxes as well.  Again, this will only need to happen at the very end, with the final results table.
 
-16. don't forget that the calculations for taxes on social security are based on how much you earn, and (if I recall correctly) are maxed out at "85% of your social security income is taxable"
+16. (removed, too complex)
+
+
 
 
 
